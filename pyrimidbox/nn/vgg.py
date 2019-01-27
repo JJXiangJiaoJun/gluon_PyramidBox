@@ -25,7 +25,7 @@ class VGGBase(gluon.HybridBlock):
     """
 
     def __init__(self, layers, filters, batch_norm, **kwargs):
-        super(VGGBase, self).__init__(**kwargs)
+        super(VGGBase, self).__init__(prefix='vgg',**kwargs)
         self.init = dict({
             'weight_initializer': mx.init.Xavier(),
             'bias_initializer': 'zeros'})
@@ -202,7 +202,7 @@ extra_spec = {
 
 
 def get_vgg_extractor(num_layers, pretrained=False, ctx=mx.cpu(),
-                      root='~/vgg_params', **kwargs):
+                      root='/home/kevin/vgg_params', **kwargs):
     """Get VGG feature extractor networks
     
     Parameters

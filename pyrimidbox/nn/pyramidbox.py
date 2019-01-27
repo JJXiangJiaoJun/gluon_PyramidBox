@@ -10,8 +10,11 @@ import gluoncv as gcv
 from .anchor import PyramidBoxAnchorGenerator
 from .predictor import ContextSensitiveModule, ConvMaxInOutPredictor
 from .fpn import LowLevelFeaturePyramidBlock
-from ..data import YunCongDetection
+from ..data import YunCongDetection, WiderDetection
 from .vgg import VGG16
+
+_models = {
+    'VGG16': VGG16}
 
 
 class PyramidBox(HybridBlock):
@@ -64,6 +67,7 @@ class PyramidBox(HybridBlock):
                  stds=(0.1, 0.1, 0.2, 0.2), nms_thresh=0.35,
                  nms_topk=5000, post_nms=750, ctx=mx.cpu(), **kwarg):
         super(PyramidBox, self).__init__(**kwarg)
+        assert base_size == 640, "Currently only 640 is supported!"
         assert isinstance(steps, dict), "Must provide steps as dict str to list include face,head,body"
         # check Parameters
         num_layers = len(steps['face'])
@@ -136,7 +140,7 @@ class PyramidBox(HybridBlock):
                                                                       body_step, alloc_size)
                     self.body_anchor_generators.add(body_anchor_generator)
                 # pre-compute larger than 16x16 anchor map
-                alloc_size = [max(sz // 2, 16) for sz in alloc_size]
+                alloc_size = [max(sz // 2, 32) for sz in alloc_size]
                 # head_alloc_size = [max(sz // 2, 16) for sz in head_alloc_size]
                 # body_alloc_size = [max(sz // 2, 16) for sz in body_alloc_size]
                 # cls_predictor & box_predictor
@@ -176,7 +180,7 @@ class PyramidBox(HybridBlock):
             fag.reset_anchors(alloc_size)
             hag.reset_anchors(alloc_size)
             bag.reset_anchors(alloc_size)
-            alloc_size = [max(sz // 2, 16) for sz in alloc_size]
+            alloc_size = [max(sz // 2, 32) for sz in alloc_size]
 
     @property
     def num_classes(self):
@@ -330,17 +334,22 @@ def get_pyramidbox(features, use_bn=False, pretrained=False, **kwargs):
         String value represents the hashtag for a certain version of pretrained weights.
     """
     pretrained_base = False if pretrained else True
+    features = _models[features]
     net = PyramidBox(features, base_size=640, sizes=sizes, ratios=ratios, steps=steps,
-                     classes=YunCongDetection.CLASSES, use_bn=use_bn,
+                     classes=WiderDetection.CLASSES, use_bn=use_bn,
                      pretrained=pretrained_base, **kwargs)
     if pretrained:
         assert isinstance(pretrained, str), "pretrained represents path to pretrained model."
         net.load_parameters(pretrained)
     else:
-        for param in net.collect_params().values():
+        for key, param in zip(net.collect_params().keys(), net.collect_params().values()):
             if param._data is not None:
                 continue
             param.initialize()
+            # if 'bias' or 'gamma' in key:
+            #     param.initialize(mx.init.Zero())
+            # else:
+            #     param.initialize(mx.init.Xavier())
     return net
 
 # if __name__ == '__main__':

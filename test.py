@@ -1,32 +1,44 @@
-from pyrimidbox import get_pyramidbox
-from pyrimidbox.nn import VGG16
-import mxnet as mx
+"""PramidBox test script"""
 import os
-from mxnet import autograd
-# os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT']=0
+
+os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = '0'
+import argparse
+import mxnet as mx
+import gluoncv as gcv
+from matplotlib import pyplot as plt
+
+from pyrimidbox import get_pyramidbox
+from pyrimidbox import PyramidBoxDetector
+plt.switch_backend('agg')
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Test with pyrimidbox networks.')
+    parser.add_argument('--network', '-n', type=str, default='VGG16',
+                        help="Base network name")
+    parser.add_argument('--use-bn', action='store_true',
+                        help="Whether enable base model to use batch-norm layer.")
+    parser.add_argument('--model', '-m', type=str, default='',
+                        help='Load weights from previously saved parameters.')
+    parser.add_argument('--image', type=str, default='tools/selfie.jpg')
+    parser.add_argument('--gpu', type=int, default='0',
+                        help='Training with GPUs, you can specify 1,3 for example.')
+    args = parser.parse_args()
+    return args
+
+
+def get_detector(name, use_bn, model, ctx):
+    net = get_pyramidbox(name, use_bn=use_bn, pretrained=model)
+    net.input_reshape((6000, 2048))
+    base = 1
+    return PyramidBoxDetector(net, base, ctx)
+
+
 if __name__ == '__main__':
-    net = get_pyramidbox(VGG16, use_bn=True)
-    net.collect_params().reset_ctx(mx.gpu())
-    x = mx.nd.random.uniform(shape=(10, 3, 640, 640), ctx=mx.gpu())
-    # with autograd.train_mode():
-    #     res=net(x)
-    res = net(x)
-    # face_cls_predicts, face_box_predicts, face_anchors, \
-    # head_cls_predicts, head_box_predicts, head_anchors, \
-    # body_cls_predicts, body_box_predicts, body_anchors = res
-    #
-    # print('face_cls_predicts', face_cls_predicts.shape)
-    # print('face_box_predicts', face_box_predicts.shape)
-    # print('face_anchors', face_anchors.shape)
-    #
-    # print('head_cls_predicts', head_cls_predicts.shape)
-    # print('head_box_predicts', head_box_predicts.shape)
-    # print('head_anchors', head_anchors.shape)
-    #
-    # print('body_cls_predicts', body_cls_predicts.shape)
-    # print('body_box_predicts', body_box_predicts.shape)
-    # print('body_anchors', body_anchors.shape)
-    ids, scores, bboxes =res
-    print('body_cls_predicts', ids.shape)
-    print('body_box_predicts', scores.shape)
-    print('body_anchors', bboxes.shape)
+    args = parse_args()
+    # context
+    ctx = mx.gpu(args.gpu) if args.gpu >= 0 else mx.cpu()
+    detector = get_detector(args.network, args.use_bn, args.model, ctx)
+    img = mx.image.imread(args.image)
+    scores, bboxes = detector.detect(img)
+    ax = gcv.utils.viz.plot_bbox(img, bboxes, thresh=0.3)
+    plt.show()

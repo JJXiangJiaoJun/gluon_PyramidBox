@@ -5,14 +5,14 @@
       <paths name="Copy of project-level server 'GTX1080Ti'">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/kevin/gluoncv" local="$PROJECT_DIR$" />
+            <mapping deploy="/home/kevin/gluon_py" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
       <paths name="GTX1080Ti">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/kevin/gluoncv" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/kevin/gluon_py" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

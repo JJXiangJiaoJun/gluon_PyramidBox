@@ -141,7 +141,7 @@ class PyramidBoxTargetGenerator(gluon.Block):
         else:
             samples = self._sampler(matches)
         cls_targets = self._cls_encoder(samples, matches, gt_ids)
-        box_targets, box_masks = self._box_encoder(samples, matches, gt_boxes)
+        box_targets, box_masks = self._box_encoder(samples, matches, anchors,gt_boxes)
         return cls_targets, box_targets, box_masks
 
 

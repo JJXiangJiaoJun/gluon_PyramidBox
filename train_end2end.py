@@ -44,7 +44,7 @@ def parse_args():
                              'You can specify it to 100 for example to start from 100 epoch.')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate,default is 0.001.')
-    parser.add_argument('--lr-decay', type=float, default=0.90,
+    parser.add_argument('--lr-decay', type=float, default=0.10,
                         help='Decay rate of learning rate. default is 0.94.')
     parser.add_argument('--lr-decay-epoch', type=str, default='80,160,200',
                         help='Epoches at which learning rate decay. default is 160,200.')
@@ -54,6 +54,8 @@ def parse_args():
                         help='SGD momentum, default is  0.9')
     parser.add_argument('--wd', type=float, default=0.0005,
                         help='Weight decay, default is 5e-4')
+    parser.add_argument('--grad-clip', type=float, default=2.0,
+                        help='Gradient clip, default is 2.0')
     parser.add_argument('--log-interval', type=int, default=50,
                         help='Logging mini-batch interval. Default is 100.')
     parser.add_argument('--save-prefix', type=str, default='models/',
@@ -72,7 +74,7 @@ def parse_args():
     parser.add_argument('--match-topk', type=int, default=6,
                         help='Topk for anchor matching.')
     args = parser.parse_args()
-    args.lr_warmup = args.lr_warmup if args.lr_warmup else 12000
+    args.lr_warmup = args.lr_warmup if args.lr_warmup else 10000
     return args
 
 
@@ -130,14 +132,14 @@ def save_params(net, logger, best_map, current_map, maps, epoch, save_interval, 
 
     if save_interval and (epoch + 1) % save_interval == 0:
         logger.info('[Epoch {}] Saving parameters to {}'.format(
-            epoch, '{:s}_{:04d}_{:.4f}.params').format(prefix,epoch, current_map))
+            epoch, '{:s}_{:04d}_{:.4f}.params').format(prefix, epoch, current_map))
         net.save_parameters(model_path)
 
 
 def validate(net, val_data, ctx, eval_metric):
     """Test on validation dataset."""
-    net.input_reshape((1024, 1024))
-    net.collect_params().reset_ctx(ctx)
+    # net.input_reshape((1024, 1024))
+    # net.collect_params().reset_ctx(ctx)
     eval_metric.reset()
     # set nms threshold and topk constraint
     # net.set_nms(nms_thresh=0.3, nms_topk=5000, post_nms=750)
@@ -168,18 +170,20 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
     """Training pipline"""
     net.collect_params().reset_ctx(ctx)
     training_patterns = '.*vgg'
-    net.collect_params(training_patterns).setattr('lr_mult', 0.01)
+    net.collect_params(training_patterns).setattr('lr_mult', 0.1)
     trainer = gluon.Trainer(
         net.collect_params(),
         'sgd',
-        {'learning_rate': args.lr,
+        {'clip_gradient': args.grad_clip,
+         'learning_rate': args.lr,
          'momentum': args.momentum,
-         'wd': args.wd})
+         'wd': args.wd,
+         })
     # lr decay policy
     lr_decay = float(args.lr_decay)
     lr_steps = sorted([float(ls) for ls in args.lr_decay_epoch.split(',') if ls.strip()])
     lr_warmup = float(args.lr_warmup)
-    mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5, lambd=0.7)
+    mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5)
 
     face_ce_metric = mx.metric.Loss('FaceCrossEntropy')
     face_smoothl1_metric = mx.metric.Loss('FaceSmoothL1')
@@ -191,7 +195,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                head_ce_metric, head_smoothl1_metric,
                body_ce_metric, body_smoothl1_metric]
     # set up loger
-    logger = logging.getLogger()# formatter = logging.Formatter('[%(asctime)s] %(message)s')
+    logger = logging.getLogger()  # formatter = logging.Formatter('[%(asctime)s] %(message)s')
     logger.setLevel(logging.INFO)
     log_file_path = args.save_prefix + '_train.log'
     log_dir = os.path.dirname(log_file_path)
@@ -217,7 +221,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
         #     trainer.set_learning_rate(new_lr)
         #     logger.info("[Epoch {}] Set learning rate to {}".format(epoch, new_lr))
         # every epoch learning rate decay
-        if total_batch >= lr_warmup:
+        if args.start_epoch != 0 or total_batch >= lr_warmup:
             new_lr = trainer.learning_rate * lr_decay
             # lr_steps.pop(0)
             trainer.set_learning_rate(new_lr)
@@ -239,7 +243,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             #         if i % args.log_interval == 0:
             #             logger.info('[Epoch 0 Iteration {}] Set learning rate to {}'.format(i, new_lr))
             #         trainer.set_learning_rate(new_lr)
-            if total_batch <= lr_warmup:
+            if args.start_epoch == 0 and total_batch <= lr_warmup:
                 # adjust based on real percentage
                 new_lr = base_lr * get_lr_at_iter((total_batch + 1) / lr_warmup)
                 if new_lr != trainer.learning_rate:
@@ -296,7 +300,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
 
                 # use 1:1:1 to backward loss
                 # totalloss = [face_sum_loss,head_sum_loss,body_sum_loss]
-                totalloss = [f + 0.5 * h + 0.4 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
+                totalloss = [f + 0.5 * h + 0.3 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
                 # totalloss = face_sum_loss+head_sum_loss
                 autograd.backward(totalloss)
             # since we have already normalized the loss, we don't want to normalize
@@ -309,6 +313,8 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             head_smoothl1_metric.update(0, [l * batch_size for l in head_box_loss])
             body_ce_metric.update(0, [l * batch_size for l in body_cls_loss])
             body_smoothl1_metric.update(0, [l * batch_size for l in body_box_loss])
+
+            # save_params(net, logger, [0], 0, None, total_batch, args.save_interval, args.save_prefix)
 
             if args.log_interval and not (i + 1) % args.log_interval:
                 info = ','.join(['{}={:.3f}'.format(*metric.get()) for metric in metrics])

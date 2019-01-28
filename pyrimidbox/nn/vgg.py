@@ -1,12 +1,12 @@
 """VGG, implemented in Gluon"""
 from __future__ import division
 
-
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import nn
 
-__all__ = ['VGG16','VGG19']
+__all__ = ['VGG16', 'VGG19']
+
 
 class VGGBase(gluon.HybridBlock):
     """
@@ -25,7 +25,7 @@ class VGGBase(gluon.HybridBlock):
     """
 
     def __init__(self, layers, filters, batch_norm, **kwargs):
-        super(VGGBase, self).__init__(prefix='vgg',**kwargs)
+        super(VGGBase, self).__init__(prefix='vgg', **kwargs)
         self.init = dict({
             'weight_initializer': mx.init.Xavier(),
             'bias_initializer': 'zeros'})
@@ -44,7 +44,7 @@ class VGGBase(gluon.HybridBlock):
 
             features = nn.HybridSequential(prefix='fc_')
             with features.name_scope():
-                features.add(nn.Conv2D(1024, kernel_size=3, padding=1,strides=1,**self.init))  # fc6
+                features.add(nn.Conv2D(1024, kernel_size=3, padding=1, strides=1, **self.init))  # fc6
                 if batch_norm:
                     features.add(nn.BatchNorm())
                 features.add(nn.Activation('relu'))
@@ -62,7 +62,6 @@ class VGGBase(gluon.HybridBlock):
                 if self.batch_norm:
                     layer.add(nn.BatchNorm())
                 layer.add(nn.Activation('relu'))
-        # layer.add(nn.MaxPool2D(2, 2))
         return layer
 
     def hybrid_forward(self, F, x, init_scale):
@@ -126,8 +125,6 @@ class VGGBase(gluon.HybridBlock):
         params['features.5.%d.weight' % j]._load_init(
             loaded['features.%d.weight' % i][:1024, :1024].reshape(1024, 1024, 1, 1), ctx)
         params['features.5.%d.bias' % j]._load_init(loaded['features.%d.bias' % i][:1024], ctx)
-
-
 
 
 class VGGExtractor(VGGBase):
@@ -195,8 +192,8 @@ vgg_spec = {
 }
 
 extra_spec = {
-    'conv': [((512, 1, 1, 0), (1024, 3, 2, 1)),  # conv6_
-             ((1024, 1, 1, 0), (2048, 3, 2, 1))],  # conv7_
+    'conv': [((256, 1, 1, 0), (512, 3, 2, 1)),  # conv6_
+             ((128, 1, 1, 0), (256, 3, 2, 1))],  # conv7_
     # 'normalize': (10, 8, 5),
 }
 
@@ -238,13 +235,12 @@ def get_vgg_extractor(num_layers, pretrained=False, ctx=mx.cpu(),
 
 def VGG16(**kwargs):
     """Get VGG16 feature extractor network"""
-    return get_vgg_extractor(16,**kwargs)
+    return get_vgg_extractor(16, **kwargs)
 
 
 def VGG19(**kwargs):
     """Get VGG19 feature extractor network"""
-    return get_vgg_extractor(19,**kwargs)
-
+    return get_vgg_extractor(19, **kwargs)
 
 # if __name__ == '__main__':
 #     net = VGG16(batch_norm=True,pretrained=True,root='~/vgg_params')
@@ -260,6 +256,6 @@ def VGG19(**kwargs):
 #     print('conv6 ',conv6.shape)
 #     print('conv7 ',conv7.shape)
 
-    # print('generate vgg16')
-    # net.import_params('test.params', mx.gpu())
-    # print(net.collect_params())
+# print('generate vgg16')
+# net.import_params('test.params', mx.gpu())
+# print(net.collect_params())

@@ -101,6 +101,11 @@ class PyramidBox(HybridBlock):
             self.conv6_context = ContextSensitiveModule(out_plain=256)
             self.conv7_context = ContextSensitiveModule(out_plain=256)
 
+            # lateral layer
+            self.convfc7_lateral = nn.Conv2D(1024, kernel_size=1)
+            self.conv6_lateral = nn.Conv2D(512, kernel_size=1)
+            self.conv7_lateral = nn.Conv2D(256, kernel_size=1)
+
             # generate anchors
             self.face_cls_predictors = nn.HybridSequential()
             self.face_box_predictors = nn.HybridSequential()
@@ -126,14 +131,16 @@ class PyramidBox(HybridBlock):
                                                                   alloc_size)
                 self.face_anchor_generators.add(face_anchor_generator)
                 if i >= 1:
-                    head_step = steps['head'][i]
+                    head_step = steps['head'][i - 1]
+                    # head_step = steps['head'][i]
                     head_size = sizes[i - 1]
                     head_ratio = ratios[i - 1]
                     head_anchor_generator = PyramidBoxAnchorGenerator(i - 1, self.im_size, head_size, head_ratio,
                                                                       head_step, alloc_size)
                     self.head_anchor_generators.add(head_anchor_generator)
                 if i >= 2:
-                    body_step = steps['body'][i]
+                    body_step = steps['body'][i - 2]
+                    # body_step = steps['body'][i]
                     body_size = sizes[i - 2]
                     body_ratio = ratios[i - 2]
                     body_anchor_generator = PyramidBoxAnchorGenerator(i - 2, self.im_size, body_size, body_ratio,
@@ -147,10 +154,10 @@ class PyramidBox(HybridBlock):
                 num_anchors = face_anchor_generator.num_depth
                 assert num_anchors == 1, "Currently only support face number anchors=1"
                 if i == 0:
-                    face_cls_predictor = ConvMaxInOutPredictor(max_in=True)
+                    face_cls_predictor = ConvMaxInOutPredictor(num_channel=num_anchors * 4, max_out=True)
                     self.face_cls_predictors.add(face_cls_predictor)
                 else:
-                    face_cls_predictor = ConvMaxInOutPredictor(max_in=False)
+                    face_cls_predictor = ConvMaxInOutPredictor(num_channel=num_anchors * 4, max_out=False)
                     self.face_cls_predictors.add(face_cls_predictor)
                 face_box_predictor = nn.Conv2D(num_anchors * 4, kernel_size=3, strides=1, padding=1)
                 self.face_box_predictors.add(face_box_predictor)
@@ -224,6 +231,10 @@ class PyramidBox(HybridBlock):
         """Hybrid forward"""
         # generate features
         conv3, conv4, conv5, conv_fc7, conv6, conv7 = self.features(x)
+        conv_fc7 = self.convfc7_lateral(conv_fc7)
+        conv6 = self.conv6_lateral(conv6)
+        conv7 = self.conv7_lateral(conv7)
+
         # build up Pyramid feature network
         output_features = list()
         lfpn0 = self.conv5_lfpn0(conv_fc7, conv5)

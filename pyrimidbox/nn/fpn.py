@@ -27,7 +27,7 @@ class TopDownBlock(HybridBlock):
         top = self.top_conv(top)
         lateral = self.lateral_conv(lateral)
         # upsample
-        top = nd.contrib.BilinearResize2D(top, width=W, height=H)
+        top = F.contrib.BilinearResize2D(top, width=W, height=H)
         # print('topshape=',top.shape)
         # if lateral.shape[2]!=H or lateral.shape[3]!=W:
         #     lateral = F.slice_like(data=lateral,shape_like=top,axes=(2,3)

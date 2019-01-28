@@ -30,12 +30,12 @@ class ConvMaxInOutPredictor(HybridBlock):
         Use bias in convolution. It is not necessary if BatchNorm is followed.
     """
 
-    def __init__(self, num_channel=4, max_in=False, kernel=(3, 3), pad=(1, 1), stride=(1, 1),
+    def __init__(self, num_channel=4, max_out=False, kernel=(3, 3), pad=(1, 1), stride=(1, 1),
                  activation='relu', use_bias=True, **kwargs):
         super(ConvMaxInOutPredictor, self).__init__(**kwargs)
         assert num_channel == 4, "Required num_channel = 4 but got {}".format(num_channel)
         self.num_channel = num_channel
-        self.max_in = max_in
+        self.max_out = max_out
         with self.name_scope():
             self.predictor = nn.Conv2D(num_channel, kernel_size=kernel, strides=stride,
                                        padding=pad, activation=activation, use_bias=use_bias,
@@ -44,7 +44,7 @@ class ConvMaxInOutPredictor(HybridBlock):
     # pylint: disable=arguments-differ
     def hybrid_forward(self, F, x):
         x = self.predictor(x)
-        if self.max_in:
+        if self.max_out:
             fc = F.slice_axis(x, axis=1, begin=0, end=1)
             bg = F.slice_axis(x, axis=1, begin=1, end=None)
             bg = F.max_axis(bg, axis=1, keepdims=True)
@@ -80,31 +80,35 @@ class ContextSensitiveModule(HybridBlock):
         self._max_in = max_in
         with self.name_scope():
             self.SSH_Conv_1 = nn.Conv2D(channels=out_plain, kernel_size=3, strides=1,
-                                        padding=1, activation='relu')
+                                        padding=1)
+            self.relu_1 = nn.Activation('relu')
             self.SSH_Conv_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                        padding=1, activation='relu')
+                                        padding=1)
+            self.relu_2 = nn.Activation('relu')
             self.SSH_Conv_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                          padding=1, activation='relu')
+                                          padding=1)
+            self.relu_2_1 = nn.Activation('relu')
             self.SSH_Conv_2_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                            padding=1, activation='relu')
+                                            padding=1)
+            self.relu_2_2_1 = nn.Activation('relu')
             self.SSH_Conv_2_2_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                            padding=1, activation='relu')
+                                            padding=1)
+            self.relu_2_2_2 = nn.Activation('relu')
 
-            # self.cls_predictor = ConvMaxInOutPredictor(num_channel=4 * depth, max_in=max_in)
+
 
     # pylint: disable=arguments-differ
     def hybrid_forward(self, F, x):
         # output X channels
-        x_conv_1 = self.SSH_Conv_1(x)
+        x_conv_1 = self.relu_1(self.SSH_Conv_1(x))
 
-        x_conv_2 = self.SSH_Conv_2(x)
-        x_conv_2_1 = self.SSH_Conv_2_1(x_conv_2)
-        x_conv_2_2 = self.SSH_Conv_2_2_2(self.SSH_Conv_2_2_1(x_conv_2))
+        x_conv_2 = self.relu_2(self.SSH_Conv_2(x))
+        x_conv_2_1 = self.relu_2_1(self.SSH_Conv_2_1(x_conv_2))
+        x_conv_2_2 = self.relu_2_2_2(self.SSH_Conv_2_2_2(self.relu_2_2_1(self.SSH_Conv_2_2_1(x_conv_2))))
         x_conv_2 = F.concat(x_conv_2_1, x_conv_2_2, dim=1)
 
         out = F.concat(x_conv_1, x_conv_2, dim=1)
 
-        # cls_preds = self.cls_predictor(out)
 
         return out
 

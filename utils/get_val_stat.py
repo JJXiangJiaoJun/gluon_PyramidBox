@@ -7,7 +7,7 @@ from __future__ import print_function
 import sys
 sys.path.append('.')
 from tqdm import tqdm
-from sfd import WiderDetection
+from pyrimidbox.data import WiderDetection
 
 dt = WiderDetection(splits='val')
 H, W = 0, 0

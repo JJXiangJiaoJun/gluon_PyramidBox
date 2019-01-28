@@ -42,9 +42,9 @@ def parse_args():
     parser.add_argument('--start-epoch', type=int, default=0,
                         help='Starting epoch for resuming, default is 0 for new training.'
                              'You can specify it to 100 for example to start from 100 epoch.')
-    parser.add_argument('--lr', type=float, default=0.001,
-                        help='Learning rate,default is 0.001.')
-    parser.add_argument('--lr-decay', type=float, default=0.10,
+    parser.add_argument('--lr', type=float, default=0.01,
+                        help='Learning rate,default is 0.01.')
+    parser.add_argument('--lr-decay', type=float, default=0.94,
                         help='Decay rate of learning rate. default is 0.94.')
     parser.add_argument('--lr-decay-epoch', type=str, default='80,160,200',
                         help='Epoches at which learning rate decay. default is 160,200.')
@@ -74,7 +74,7 @@ def parse_args():
     parser.add_argument('--match-topk', type=int, default=6,
                         help='Topk for anchor matching.')
     args = parser.parse_args()
-    args.lr_warmup = args.lr_warmup if args.lr_warmup else 10000
+    args.lr_warmup = args.lr_warmup if args.lr_warmup else 1000
     return args
 
 
@@ -169,8 +169,8 @@ def get_lr_at_iter(alpha):
 def train(net, train_data, val_data, eval_metric, ctx, args):
     """Training pipline"""
     net.collect_params().reset_ctx(ctx)
-    training_patterns = '.*vgg'
-    net.collect_params(training_patterns).setattr('lr_mult', 0.1)
+    # training_patterns = '.*vgg'
+    # net.collect_params(training_patterns).setattr('lr_mult', 0.1)
     trainer = gluon.Trainer(
         net.collect_params(),
         'sgd',
@@ -183,8 +183,10 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
     lr_decay = float(args.lr_decay)
     lr_steps = sorted([float(ls) for ls in args.lr_decay_epoch.split(',') if ls.strip()])
     lr_warmup = float(args.lr_warmup)
-    mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5)
 
+    face_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5,lambd=0.6)
+    head_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5,lambd=0.6)
+    body_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5,lambd=0.6)
     face_ce_metric = mx.metric.Loss('FaceCrossEntropy')
     face_smoothl1_metric = mx.metric.Loss('FaceSmoothL1')
     head_ce_metric = mx.metric.Loss('HeadCrossEntropy')
@@ -194,6 +196,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
     metrics = [face_ce_metric, face_smoothl1_metric,
                head_ce_metric, head_smoothl1_metric,
                body_ce_metric, body_smoothl1_metric]
+
     # set up loger
     logger = logging.getLogger()  # formatter = logging.Formatter('[%(asctime)s] %(message)s')
     logger.setLevel(logging.INFO)
@@ -226,6 +229,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             # lr_steps.pop(0)
             trainer.set_learning_rate(new_lr)
             logger.info("[Epoch {}] Set learning rate to {}".format(epoch, new_lr))
+
         face_ce_metric.reset()
         face_smoothl1_metric.reset()
         head_ce_metric.reset()
@@ -262,14 +266,6 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             head_box_target = gluon.utils.split_and_load(batch[5], ctx_list=ctx, batch_axis=0)
             body_box_target = gluon.utils.split_and_load(batch[6], ctx_list=ctx, batch_axis=0)
 
-            # print('face_cls_target', face_cls_target)
-            # print('face_box_target', face_box_target)
-            # print('head_cls_target', head_cls_target)
-            # print('head_box_target', head_box_target)
-            #
-            # print('body_cls_target',body_cls_target)
-            # print('body_box_target',body_box_target)
-            # return
             with autograd.record():
                 face_cls_preds = []
                 face_box_preds = []
@@ -289,23 +285,23 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                     body_cls_preds.append(body_cls_predict)
                     body_box_preds.append(body_box_predict)
                 # calculate the loss
-                face_sum_loss, face_cls_loss, face_box_loss = mbox_loss(
+                face_sum_loss, face_cls_loss, face_box_loss = face_mbox_loss(
                     face_cls_preds, face_box_preds, face_cls_target, face_box_target)
 
-                head_sum_loss, head_cls_loss, head_box_loss = mbox_loss(
+                head_sum_loss, head_cls_loss, head_box_loss = head_mbox_loss(
                     head_cls_preds, head_box_preds, head_cls_target, head_box_target)
 
-                body_sum_loss, body_cls_loss, body_box_loss = mbox_loss(
+                body_sum_loss, body_cls_loss, body_box_loss = body_mbox_loss(
                     body_cls_preds, body_box_preds, body_cls_target, body_box_target)
 
-                # use 1:1:1 to backward loss
+                # use 1:0.5:0.2 to backward loss
                 # totalloss = [face_sum_loss,head_sum_loss,body_sum_loss]
-                totalloss = [f + 0.5 * h + 0.3 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
+                totalloss = [f + 0 * h + 0 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
                 # totalloss = face_sum_loss+head_sum_loss
                 autograd.backward(totalloss)
             # since we have already normalized the loss, we don't want to normalize
             # by batch-size anymore
-            trainer.step(batch_size)
+            trainer.step(1)
             # logger training info
             face_ce_metric.update(0, [l * batch_size for l in face_cls_loss])
             face_smoothl1_metric.update(0, [l * batch_size for l in face_box_loss])

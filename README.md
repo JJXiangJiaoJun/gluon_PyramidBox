@@ -13,10 +13,7 @@ If you want to learn more details,please refer to the original paper.
 ```
 I train PyramidBox with WIDER FACE dataset,results are as follows:
 
-|&emsp;&emsp;|Easy mAP|Medium mAP|Hard mAP|
-|---|---|---|---|
-|paper|**96.1**|**95.0**|**88.9**|
-|this repo|**92.5**|**91.8**|**85.8**|
+
 
 I think mainly reasons that this repo can not get the same precision as paper as follows:
 * I use batch size 4 because of memory limitations,which is 16 in the paper

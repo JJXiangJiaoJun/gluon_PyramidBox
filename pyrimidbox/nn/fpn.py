@@ -18,8 +18,8 @@ class TopDownBlock(HybridBlock):
         super(TopDownBlock, self).__init__(**kwargs)
         self._out_plain = topdown_out_plain
         with self.name_scope():
-            self.top_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1)
-            self.lateral_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1)
+            self.top_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.lateral_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
 
     # pylint: disable=arguments-differ
     def hybrid_forward(self, F, top, lateral):
@@ -28,9 +28,6 @@ class TopDownBlock(HybridBlock):
         lateral = self.lateral_conv(lateral)
         # upsample
         top = F.contrib.BilinearResize2D(top, width=W, height=H)
-        # print('topshape=',top.shape)
-        # if lateral.shape[2]!=H or lateral.shape[3]!=W:
-        #     lateral = F.slice_like(data=lateral,shape_like=top,axes=(2,3)
         out = top + lateral
         return out
 
@@ -51,7 +48,7 @@ class LowLevelFeaturePyramidBlock(HybridBlock):
         super(LowLevelFeaturePyramidBlock, self).__init__(**kwargs)
         with self.name_scope():
             self.topdown = TopDownBlock(topdown_out_plain)
-            self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1)
+            self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
 
     # pylint: disable=arguments-differ
     def hybrid_forward(self, F, top, lateral):

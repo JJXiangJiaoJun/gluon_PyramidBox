@@ -8,7 +8,7 @@ from mxnet.gluon import nn
 class ConvMaxInOutPredictor(HybridBlock):
     """Convolutional Max-in-out background classification predictor for PyramidBox
         It is useful to reduce false positive and improve recall rate.
-        ref:
+        ref:        self.softmax = nn.Softmax(dim=-1)
 
     Parameters
     ---------
@@ -80,19 +80,19 @@ class ContextSensitiveModule(HybridBlock):
         self._max_in = max_in
         with self.name_scope():
             self.SSH_Conv_1 = nn.Conv2D(channels=out_plain, kernel_size=3, strides=1,
-                                        padding=1)
+                                        padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             self.relu_1 = nn.Activation('relu')
             self.SSH_Conv_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                        padding=1)
+                                        padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             self.relu_2 = nn.Activation('relu')
             self.SSH_Conv_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                          padding=1)
+                                          padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             self.relu_2_1 = nn.Activation('relu')
             self.SSH_Conv_2_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                            padding=1)
+                                            padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             self.relu_2_2_1 = nn.Activation('relu')
             self.SSH_Conv_2_2_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                            padding=1)
+                                            padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             self.relu_2_2_2 = nn.Activation('relu')
 
 

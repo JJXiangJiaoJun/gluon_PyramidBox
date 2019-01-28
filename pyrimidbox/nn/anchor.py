@@ -39,7 +39,7 @@ class PyramidBoxAnchorGenerator(gluon.HybridBlock):
        """
 
     def __init__(self, index, im_size, sizes, ratios, step, alloc_size=[128, 128],
-                 offsets=(0.5, 0.5), clip=False, **kwargs):
+                 offsets=(0.5, 0.5), clip=True, **kwargs):
         super(PyramidBoxAnchorGenerator, self).__init__(**kwargs)
         assert len(im_size) == 2
         self._im_size = im_size
@@ -116,7 +116,7 @@ class PyramidBoxTargetGenerator(gluon.Block):
         Std value to be divided from encoded values.
     """
 
-    def __init__(self, iou_thresh=0.5, neg_thresh=0.5, negative_mining_ratio=3,
+    def __init__(self, iou_thresh=0.35, neg_thresh=0.5, negative_mining_ratio=3,
                  stds=(0.1, 0.1, 0.2, 0.2), **kwargs):
         super(PyramidBoxTargetGenerator, self).__init__(**kwargs)
         self._matcher = CompositeMatcher([BipartiteMatcher(), MaximumMatcher(iou_thresh)])

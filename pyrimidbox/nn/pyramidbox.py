@@ -65,7 +65,7 @@ class PyramidBox(HybridBlock):
     def __init__(self, features, base_size, sizes, ratios,
                  steps, classes, use_bn=False, pretrained=False,
                  stds=(0.1, 0.1, 0.2, 0.2), nms_thresh=0.35,
-                 nms_topk=5000, post_nms=750, ctx=mx.cpu(), **kwarg):
+                 nms_topk=5000, post_nms=1500, ctx=mx.cpu(), **kwarg):
         super(PyramidBox, self).__init__(**kwarg)
         assert base_size == 640, "Currently only 640 is supported!"
         assert isinstance(steps, dict), "Must provide steps as dict str to list include face,head,body"
@@ -80,6 +80,7 @@ class PyramidBox(HybridBlock):
                 num_layers, len(sizes), len(ratios))
         assert num_layers > 0, "Pyramidbox require at least one layer,suggest multiple"
         self.features = features(batch_norm=use_bn, pretrained=pretrained, ctx=ctx)
+        # self.features = features
         self._num_layers = num_layers
         self.classes = classes
         self.nms_thresh = nms_thresh
@@ -90,7 +91,7 @@ class PyramidBox(HybridBlock):
 
         with self.name_scope():
             # low-level feature pyramid net
-            self.conv5_lfpn0 = LowLevelFeaturePyramidBlock(1024, 1024)
+            self.conv5_lfpn0 = LowLevelFeaturePyramidBlock(512, 512)
             self.conv4_lfpn1 = LowLevelFeaturePyramidBlock(512, 512)
             self.conv3_lfpn2 = LowLevelFeaturePyramidBlock(256, 256)
             # context-sensetive modules
@@ -102,9 +103,12 @@ class PyramidBox(HybridBlock):
             self.conv7_context = ContextSensitiveModule(out_plain=256)
 
             # lateral layer
-            self.convfc7_lateral = nn.Conv2D(1024, kernel_size=1)
-            self.conv6_lateral = nn.Conv2D(512, kernel_size=1)
-            self.conv7_lateral = nn.Conv2D(256, kernel_size=1)
+            self.convfc7_lateral = nn.Conv2D(1024, kernel_size=1,
+                                             weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.conv6_lateral = nn.Conv2D(512, kernel_size=1,
+                                           weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.conv7_lateral = nn.Conv2D(256, kernel_size=1,
+                                           weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
 
             # generate anchors
             self.face_cls_predictors = nn.HybridSequential()
@@ -119,8 +123,6 @@ class PyramidBox(HybridBlock):
             self.body_anchor_generators = nn.HybridSequential()
 
             alloc_size = [base_size // 4, base_size // 4]
-            # head_alloc_size = [asz // 2 for asz in face_alloc_size]
-            # body_alloc_size = [asz // 2 for asz in head_alloc_size]
 
             for i in range(num_layers):
                 # pregenerate prior box
@@ -132,7 +134,6 @@ class PyramidBox(HybridBlock):
                 self.face_anchor_generators.add(face_anchor_generator)
                 if i >= 1:
                     head_step = steps['head'][i - 1]
-                    # head_step = steps['head'][i]
                     head_size = sizes[i - 1]
                     head_ratio = ratios[i - 1]
                     head_anchor_generator = PyramidBoxAnchorGenerator(i - 1, self.im_size, head_size, head_ratio,
@@ -140,7 +141,6 @@ class PyramidBox(HybridBlock):
                     self.head_anchor_generators.add(head_anchor_generator)
                 if i >= 2:
                     body_step = steps['body'][i - 2]
-                    # body_step = steps['body'][i]
                     body_size = sizes[i - 2]
                     body_ratio = ratios[i - 2]
                     body_anchor_generator = PyramidBoxAnchorGenerator(i - 2, self.im_size, body_size, body_ratio,
@@ -159,21 +159,30 @@ class PyramidBox(HybridBlock):
                 else:
                     face_cls_predictor = ConvMaxInOutPredictor(num_channel=num_anchors * 4, max_out=False)
                     self.face_cls_predictors.add(face_cls_predictor)
-                face_box_predictor = nn.Conv2D(num_anchors * 4, kernel_size=3, strides=1, padding=1)
+                face_box_predictor = nn.Conv2D(num_anchors * 4, kernel_size=3, strides=1, padding=1,
+                                               weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
                 self.face_box_predictors.add(face_box_predictor)
                 if i >= 1:
                     num_anchors = head_anchor_generator.num_depth
                     assert num_anchors == 1, "Currently only support head number anchors=1"
-                    head_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1)
+                    head_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1,
+                                                   weight_initializer=mx.init.Xavier(magnitude=2),
+                                                   bias_initializer='zeros')
                     self.head_cls_predictors.add(head_cls_predictor)
-                    head_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1)
+                    head_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1,
+                                                   weight_initializer=mx.init.Xavier(magnitude=2),
+                                                   bias_initializer='zeros')
                     self.head_box_predictors.add(head_box_predictor)
                 if i >= 2:
                     num_anchors = body_anchor_generator.num_depth
                     assert num_anchors == 1, "Currently only support body number anchors=1"
-                    body_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1)
+                    body_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1,
+                                                   weight_initializer=mx.init.Xavier(magnitude=2),
+                                                   bias_initializer='zeros')
                     self.body_cls_predictors.add(body_cls_predictor)
-                    body_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1)
+                    body_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1,
+                                                   weight_initializer=mx.init.Xavier(magnitude=2),
+                                                   bias_initializer='zeros')
                     self.body_box_predictors.add(body_box_predictor)
 
             self.bbox_decoder = gcv.nn.coder.NormalizedBoxCenterDecoder(stds)
@@ -201,7 +210,7 @@ class PyramidBox(HybridBlock):
         """
         return len(self.classes)
 
-    def set_nms(self, nms_thresh=0.3, nms_topk=5000, post_nms=750):
+    def set_nms(self, nms_thresh=0.3, nms_topk=5000, post_nms=1500):
         """Set non-maximum suppression parameters.
 
                 Parameters
@@ -256,42 +265,34 @@ class PyramidBox(HybridBlock):
         output_features.append(conv7)
         # contextual sensitive predictor
 
-        # print('lfpn2',lfpn2.shape)
-        # print('lfpn1', lfpn1.shape)
-        # print('lfpn0', lfpn0.shape)
-        # print('conv_fc7',conv_fc7.shape)
-        # print('conv6', conv6.shape)
-        # print('conv7', conv7.shape)
-
-        # face_cls_predict = self.face_cls_predictors[0](output_features[0])
-        # print('face_cls_predict',face_cls_predict.shape)
-        face_cls_predicts = [F.flatten(F.transpose(cp(feat), (0, 2, 3, 1)))
-                             for feat, cp in zip(output_features, self.face_cls_predictors)]
-        face_box_predicts = [F.flatten(F.transpose(bp(feat), (0, 2, 3, 1)))
-                             for feat, bp in zip(output_features, self.face_box_predictors)]
+        face_cls_predicts = [F.flatten(F.transpose(fcp(feat), (0, 2, 3, 1)))
+                             for feat, fcp in zip(output_features, self.face_cls_predictors)]
+        face_box_predicts = [F.flatten(F.transpose(fbp(feat), (0, 2, 3, 1)))
+                             for feat, fbp in zip(output_features, self.face_box_predictors)]
         face_anchors = [F.reshape(fag(feat), shape=(1, -1))
                         for feat, fag in zip(output_features, self.face_anchor_generators)]
+
         face_cls_predicts = F.concat(*face_cls_predicts, dim=1).reshape((0, -1, self.num_classes + 1))
         face_box_predicts = F.concat(*face_box_predicts, dim=1).reshape((0, -1, 4))
         face_anchors = F.concat(*face_anchors, dim=1).reshape((1, -1, 4))
 
         if autograd.is_training():
-            head_cls_predicts = [F.flatten(F.transpose(cp(feat), (0, 2, 3, 1)))
-                                 for feat, cp in zip(output_features[1:], self.head_cls_predictors)]
-            head_box_predicts = [F.flatten(F.transpose(bp(feat), (0, 2, 3, 1)))
-                                 for feat, bp in zip(output_features[1:], self.head_box_predictors)]
-            head_anchors = [F.reshape(fag(feat), shape=(1, -1))
-                            for feat, fag in zip(output_features[1:], self.head_anchor_generators)]
+            head_cls_predicts = [F.flatten(F.transpose(hcp(feat), (0, 2, 3, 1)))
+                                 for feat, hcp in zip(output_features[1:], self.head_cls_predictors)]
+            head_box_predicts = [F.flatten(F.transpose(hbp(feat), (0, 2, 3, 1)))
+                                 for feat, hbp in zip(output_features[1:], self.head_box_predictors)]
+            head_anchors = [F.reshape(hag(feat), shape=(1, -1))
+                            for feat, hag in zip(output_features[1:], self.head_anchor_generators)]
             head_cls_predicts = F.concat(*head_cls_predicts, dim=1).reshape((0, -1, self.num_classes + 1))
             head_box_predicts = F.concat(*head_box_predicts, dim=1).reshape((0, -1, 4))
             head_anchors = F.concat(*head_anchors, dim=1).reshape((1, -1, 4))
 
-            body_cls_predicts = [F.flatten(F.transpose(cp(feat), (0, 2, 3, 1)))
-                                 for feat, cp in zip(output_features[2:], self.body_cls_predictors)]
-            body_box_predicts = [F.flatten(F.transpose(bp(feat), (0, 2, 3, 1)))
-                                 for feat, bp in zip(output_features[2:], self.body_box_predictors)]
-            body_anchors = [F.reshape(fag(feat), shape=(1, -1))
-                            for feat, fag in zip(output_features[2:], self.body_anchor_generators)]
+            body_cls_predicts = [F.flatten(F.transpose(bcp(feat), (0, 2, 3, 1)))
+                                 for feat, bcp in zip(output_features[2:], self.body_cls_predictors)]
+            body_box_predicts = [F.flatten(F.transpose(bbp(feat), (0, 2, 3, 1)))
+                                 for feat, bbp in zip(output_features[2:], self.body_box_predictors)]
+            body_anchors = [F.reshape(bag(feat), shape=(1, -1))
+                            for feat, bag in zip(output_features[2:], self.body_anchor_generators)]
 
             body_cls_predicts = F.concat(*body_cls_predicts, dim=1).reshape((0, -1, self.num_classes + 1))
             body_box_predicts = F.concat(*body_box_predicts, dim=1).reshape((0, -1, 4))
@@ -346,21 +347,20 @@ def get_pyramidbox(features, use_bn=False, pretrained=False, **kwargs):
     """
     pretrained_base = False if pretrained else True
     features = _models[features]
+    # features_extractor = _models[features](batch_norm=use_bn, pretrained=False)
     net = PyramidBox(features, base_size=640, sizes=sizes, ratios=ratios, steps=steps,
                      classes=WiderDetection.CLASSES, use_bn=use_bn,
                      pretrained=pretrained_base, **kwargs)
+    # net.collect_params().initialize(mx.init.Xavier())
+    # net.features = _models[features](batch_norm=use_bn, pretrained=pretrained_base)
     if pretrained:
         assert isinstance(pretrained, str), "pretrained represents path to pretrained model."
         net.load_parameters(pretrained)
     else:
-        for key, param in zip(net.collect_params().keys(), net.collect_params().values()):
+        for param in net.collect_params().values():
             if param._data is not None:
                 continue
             param.initialize()
-            # if 'bias' or 'gamma' in key:
-            #     param.initialize(mx.init.Zero())
-            # else:
-            #     param.initialize(mx.init.Xavier())
     return net
 
 # if __name__ == '__main__':

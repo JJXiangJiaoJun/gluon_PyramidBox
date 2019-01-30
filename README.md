@@ -12,6 +12,10 @@ If you want to learn more details,please refer to the original paper.
 }
 ```
 I train PyramidBox with WIDER FACE dataset,results are as follows:
+|&emsp;&emsp;|Easy mAP|Medium mAP|Hard mAP|
+|---|---|---|---|
+|paper|**96.1**|**95.0**|**88.9**|
+|this repo|**86.5**|**85.8**|**79.3**|
 
 
 

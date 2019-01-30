@@ -81,18 +81,28 @@ class ContextSensitiveModule(HybridBlock):
         with self.name_scope():
             self.SSH_Conv_1 = nn.Conv2D(channels=out_plain, kernel_size=3, strides=1,
                                         padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.SSH_Conv_1 = nn.Conv2D(channels=out_plain, kernel_size=3, strides=1,padding=1
+            #                             )
             self.relu_1 = nn.Activation('relu')
             self.SSH_Conv_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
                                         padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.SSH_Conv_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,padding=1
+            #                             )
             self.relu_2 = nn.Activation('relu')
             self.SSH_Conv_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
                                           padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.SSH_Conv_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
+            #                               padding=1,)
             self.relu_2_1 = nn.Activation('relu')
             self.SSH_Conv_2_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
                                             padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.SSH_Conv_2_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
+            #                                 padding=1,)
             self.relu_2_2_1 = nn.Activation('relu')
             self.SSH_Conv_2_2_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
                                             padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.SSH_Conv_2_2_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
+            #                                 padding=1, )
             self.relu_2_2_2 = nn.Activation('relu')
 
 

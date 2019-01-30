@@ -18,8 +18,12 @@ class TopDownBlock(HybridBlock):
         super(TopDownBlock, self).__init__(**kwargs)
         self._out_plain = topdown_out_plain
         with self.name_scope():
-            self.top_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
-            self.lateral_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.top_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1,
+                                      weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.top_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1)
+            self.lateral_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1,
+                                          weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.lateral_conv = nn.Conv2D(channels=topdown_out_plain, kernel_size=1)
 
     # pylint: disable=arguments-differ
     def hybrid_forward(self, F, top, lateral):
@@ -48,9 +52,13 @@ class LowLevelFeaturePyramidBlock(HybridBlock):
         super(LowLevelFeaturePyramidBlock, self).__init__(**kwargs)
         with self.name_scope():
             self.topdown = TopDownBlock(topdown_out_plain)
-            self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1,
+                                    weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1,
+            # )
 
-    # pylint: disable=arguments-differ
+        # pylint: disable=arguments-differ
+
     def hybrid_forward(self, F, top, lateral):
         topdown_out = self.topdown(top, lateral)
         smooth_out = self.smooth(topdown_out)

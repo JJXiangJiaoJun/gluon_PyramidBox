@@ -42,9 +42,9 @@ def parse_args():
     parser.add_argument('--start-epoch', type=int, default=0,
                         help='Starting epoch for resuming, default is 0 for new training.'
                              'You can specify it to 100 for example to start from 100 epoch.')
-    parser.add_argument('--lr', type=float, default=0.01,
+    parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate,default is 0.01.')
-    parser.add_argument('--lr-decay', type=float, default=0.94,
+    parser.add_argument('--lr-decay', type=float, default=0.5,
                         help='Decay rate of learning rate. default is 0.94.')
     parser.add_argument('--lr-decay-epoch', type=str, default='80,160,200',
                         help='Epoches at which learning rate decay. default is 160,200.')
@@ -169,8 +169,8 @@ def get_lr_at_iter(alpha):
 def train(net, train_data, val_data, eval_metric, ctx, args):
     """Training pipline"""
     net.collect_params().reset_ctx(ctx)
-    # training_patterns = '.*vgg'
-    # net.collect_params(training_patterns).setattr('lr_mult', 0.1)
+    training_patterns = '.*vgg'
+    net.collect_params(training_patterns).setattr('lr_mult', 0.1)
     trainer = gluon.Trainer(
         net.collect_params(),
         'sgd',
@@ -184,9 +184,9 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
     lr_steps = sorted([float(ls) for ls in args.lr_decay_epoch.split(',') if ls.strip()])
     lr_warmup = float(args.lr_warmup)
 
-    face_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5,lambd=0.6)
-    head_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5,lambd=0.6)
-    body_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5,lambd=0.6)
+    face_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5, lambd=0.8)
+    head_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5, lambd=0.6)
+    body_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5, lambd=0.6)
     face_ce_metric = mx.metric.Loss('FaceCrossEntropy')
     face_smoothl1_metric = mx.metric.Loss('FaceSmoothL1')
     head_ce_metric = mx.metric.Loss('HeadCrossEntropy')
@@ -296,7 +296,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
 
                 # use 1:0.5:0.2 to backward loss
                 # totalloss = [face_sum_loss,head_sum_loss,body_sum_loss]
-                totalloss = [f + 0 * h + 0 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
+                totalloss = [f + 0.5 * h + 0.2 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
                 # totalloss = face_sum_loss+head_sum_loss
                 autograd.backward(totalloss)
             # since we have already normalized the loss, we don't want to normalize
@@ -313,12 +313,12 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             # save_params(net, logger, [0], 0, None, total_batch, args.save_interval, args.save_prefix)
 
             if args.log_interval and not (i + 1) % args.log_interval:
-                info = ','.join(['{}={:.3f}'.format(*metric.get()) for metric in metrics])
+                info = ','.join(['{}={:.4f}'.format(*metric.get()) for metric in metrics])
                 # print(info)
                 logger.info('[Epoch {}][Batch {}], Speed: {:.3f} samples/sec {:s}'.format(
                     epoch, i, batch_size / (time.time() - btic), info))
             btic = time.time()
-        info = ','.join(['{}={:.3f}'.format(*metric.get()) for metric in metrics])
+        info = ','.join(['{}={:.4f}'.format(*metric.get()) for metric in metrics])
         logger.info('[Epoch {}] Training cost: {:s}'.format(epoch, info))
 
         if args.val_interval and not (epoch + 1) % args.val_interval:

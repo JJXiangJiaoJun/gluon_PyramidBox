@@ -105,10 +105,16 @@ class PyramidBox(HybridBlock):
             # lateral layer
             self.convfc7_lateral = nn.Conv2D(1024, kernel_size=1,
                                              weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.convfc7_lateral = nn.Conv2D(1024, kernel_size=1,
+            #                                  )
             self.conv6_lateral = nn.Conv2D(512, kernel_size=1,
                                            weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.conv6_lateral = nn.Conv2D(512, kernel_size=1,
+            #                                )
             self.conv7_lateral = nn.Conv2D(256, kernel_size=1,
                                            weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.conv7_lateral = nn.Conv2D(256, kernel_size=1,
+            #                                )
 
             # generate anchors
             self.face_cls_predictors = nn.HybridSequential()
@@ -161,6 +167,8 @@ class PyramidBox(HybridBlock):
                     self.face_cls_predictors.add(face_cls_predictor)
                 face_box_predictor = nn.Conv2D(num_anchors * 4, kernel_size=3, strides=1, padding=1,
                                                weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+                # face_box_predictor = nn.Conv2D(num_anchors * 4, kernel_size=3, strides=1, padding=1,
+                #                                )
                 self.face_box_predictors.add(face_box_predictor)
                 if i >= 1:
                     num_anchors = head_anchor_generator.num_depth
@@ -168,10 +176,16 @@ class PyramidBox(HybridBlock):
                     head_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1,
                                                    weight_initializer=mx.init.Xavier(magnitude=2),
                                                    bias_initializer='zeros')
+                    # head_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1,
+                    #                                )
+
                     self.head_cls_predictors.add(head_cls_predictor)
                     head_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1,
                                                    weight_initializer=mx.init.Xavier(magnitude=2),
                                                    bias_initializer='zeros')
+                    # head_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1,
+                    #                                )
+
                     self.head_box_predictors.add(head_box_predictor)
                 if i >= 2:
                     num_anchors = body_anchor_generator.num_depth
@@ -179,10 +193,14 @@ class PyramidBox(HybridBlock):
                     body_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1,
                                                    weight_initializer=mx.init.Xavier(magnitude=2),
                                                    bias_initializer='zeros')
+                    # body_cls_predictor = nn.Conv2D(2 * num_anchors, kernel_size=3, strides=1, padding=1,
+                    #                                )
                     self.body_cls_predictors.add(body_cls_predictor)
                     body_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1,
                                                    weight_initializer=mx.init.Xavier(magnitude=2),
                                                    bias_initializer='zeros')
+                    # body_box_predictor = nn.Conv2D(4 * num_anchors, kernel_size=3, strides=1, padding=1,
+                    #                                )
                     self.body_box_predictors.add(body_box_predictor)
 
             self.bbox_decoder = gcv.nn.coder.NormalizedBoxCenterDecoder(stds)

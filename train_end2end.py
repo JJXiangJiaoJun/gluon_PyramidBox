@@ -13,9 +13,11 @@ from gluoncv import utils as gutils
 from gluoncv.data.batchify import Tuple, Stack, Pad
 
 from mxnet import gluon
-from pyrimidbox.nn import get_pyramidbox
-from pyrimidbox.data import PyramidBoxTrainTransform, PyramidBoxValTransform
-from pyrimidbox.data import WiderDetection, WiderFaceMetric, WiderFaceEvalMetric
+from pyramidbox.nn import get_pyramidbox
+from pyramidbox.data import PyramidBoxTrainTransform, PyramidBoxValTransform
+from pyramidbox.data import WiderDetection, WiderFaceMetric, WiderFaceEvalMetric
+from gluoncv.utils import LRScheduler, LRSequential
+import tqdm
 
 
 def parse_args():
@@ -34,7 +36,7 @@ def parse_args():
                         help="Number of data workers.Multi-thread to accelerate data loading.if your CPU and GPU are powerful.")
     parser.add_argument('--gpus', type=str, default='0,',
                         help="Training with GPUs, you can specify 1,2,3 for example.")
-    parser.add_argument('--epochs', type=int, default=50,
+    parser.add_argument('--epochs', type=int, default=10,
                         help="Training epochs.")
     parser.add_argument("--resume", type=str, default='',
                         help="Resume from previously saved parameters if not None."
@@ -50,6 +52,8 @@ def parse_args():
                         help='Epoches at which learning rate decay. default is 160,200.')
     parser.add_argument('--lr-warmup', type=str, default='',
                         help='warmup iterations to adjust learning rate, default is 0 for voc.')
+    parser.add_argument('--warmup-epochs', type=int, default=1,
+                        help='warmup epochs for training schedule.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='SGD momentum, default is  0.9')
     parser.add_argument('--wd', type=float, default=0.0005,
@@ -62,7 +66,7 @@ def parse_args():
                         help='Saving parameter prefix')
     parser.add_argument('--save-interval', type=int, default=1,
                         help='Saving parameters epoch interval,best model will always be saved.')
-    parser.add_argument('--val-interval', type=int, default=5,
+    parser.add_argument('--val-interval', type=int, default=1,
                         help='Epoch interval for validation, increase the number will reduce the '
                              'training time if validation is slow.')
     parser.add_argument('--seed', type=int, default=233,
@@ -84,8 +88,8 @@ def get_dataset(dataset):
         dataset = ('train', 'val')
     else:
         assert dataset == 'train', "Invalid training dataset: {}".format(dataset)
-    train_dataset = WiderDetection(root='/home/kevin/yuncong', splits=dataset)
-    val_dataset = WiderDetection(root='/home/kevin/yuncong', splits='custom')
+    train_dataset = WiderDetection(root='widerface', splits=dataset)
+    val_dataset = WiderDetection(root='widerface', splits='custom')
     val_metric = WiderFaceMetric(iou_thresh=0.5)
     return train_dataset, val_dataset, val_metric
 
@@ -103,6 +107,9 @@ def get_dataloader(net, train_dataset, val_dataset, data_shape, batch_size, num_
     train_batchify_fn = Tuple(Stack(),  # source img
                               Stack(), Stack(), Stack(),  # face_cls_targets,head_cls_targets,body_cls_targets
                               Stack(), Stack(), Stack())  # face_box_targets,head_box_targets,body_cls_targets
+    # train_batchify_fn = Tuple(Stack(),  # source img
+    #                           Pad(), Pad(), Pad(),  # face_cls_targets,head_cls_targets,body_cls_targets
+    #                           Pad(), Pad(), Pad())  # face_box_targets,head_box_targets,body_cls_targets
     # getdataloader
     train_loader = gluon.data.DataLoader(train_dataset.transform(
         PyramidBoxTrainTransform(width, height, anchors)),
@@ -140,10 +147,11 @@ def validate(net, val_data, ctx, eval_metric):
     """Test on validation dataset."""
     # net.input_reshape((1024, 1024))
     # net.collect_params().reset_ctx(ctx)
+    print('start evaluation........')
     eval_metric.reset()
     # set nms threshold and topk constraint
     # net.set_nms(nms_thresh=0.3, nms_topk=5000, post_nms=750)
-    for batch in val_data:
+    for batch in tqdm.tqdm(val_data):
         data = gluon.utils.split_and_load(batch[0], ctx_list=ctx, batch_axis=0, even_split=False)
         label = gluon.utils.split_and_load(batch[1], ctx_list=ctx, batch_axis=0, even_split=False)
         det_bboxes = []
@@ -166,27 +174,44 @@ def get_lr_at_iter(alpha):
     return alpha
 
 
-def train(net, train_data, val_data, eval_metric, ctx, args):
+def train(net, train_samples, train_data, val_data, eval_metric, ctx, args):
     """Training pipline"""
     net.collect_params().reset_ctx(ctx)
-    training_patterns = '.*vgg'
-    net.collect_params(training_patterns).setattr('lr_mult', 0.1)
+    # training_patterns = '.*vgg'
+    # net.collect_params(training_patterns).setattr('lr_mult', 0.1)
+
+    num_batches = train_samples // args.batch_size
+
+    if args.start_epoch == 0:
+        lr_scheduler = LRSequential([
+            LRScheduler('linear', base_lr=0, target_lr=args.lr,
+                        nepochs=args.warmup_epochs, iters_per_epoch=num_batches),
+            LRScheduler('cosine', base_lr=args.lr, target_lr=0,
+                        nepochs=args.epochs - args.warmup_epochs
+                        , iters_per_epoch=num_batches)])
+    else:
+        offset = args.start_epoch
+        lr_scheduler = LRSequential([
+            LRScheduler('cosine', base_lr=args.lr, target_lr=0,
+                        nepochs=args.epochs - offset
+                        , iters_per_epoch=num_batches)
+        ])
+
+    opt_params = {'learning_rate': args.lr, 'momentum': args.momentum, 'wd': args.wd,
+                  'lr_scheduler': lr_scheduler}
+
     trainer = gluon.Trainer(
         net.collect_params(),
-        'sgd',
-        {'clip_gradient': args.grad_clip,
-         'learning_rate': args.lr,
-         'momentum': args.momentum,
-         'wd': args.wd,
-         })
+        'nag',
+        opt_params)
     # lr decay policy
-    lr_decay = float(args.lr_decay)
-    lr_steps = sorted([float(ls) for ls in args.lr_decay_epoch.split(',') if ls.strip()])
-    lr_warmup = float(args.lr_warmup)
+    # lr_decay = float(args.lr_decay)
+    # lr_steps = sorted([float(ls) for ls in args.lr_decay_epoch.split(',') if ls.strip()])
+    # lr_warmup = float(args.lr_warmup)
 
-    face_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5, lambd=0.8)
-    head_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5, lambd=0.6)
-    body_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=0.5, lambd=0.6)
+    face_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=1.0, lambd=0.5)
+    head_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=1.0, lambd=0.5)
+    body_mbox_loss = gcv.loss.SSDMultiBoxLoss(rho=1.0, lambd=0.5)
     face_ce_metric = mx.metric.Loss('FaceCrossEntropy')
     face_smoothl1_metric = mx.metric.Loss('FaceSmoothL1')
     head_ce_metric = mx.metric.Loss('HeadCrossEntropy')
@@ -224,37 +249,27 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
         #     trainer.set_learning_rate(new_lr)
         #     logger.info("[Epoch {}] Set learning rate to {}".format(epoch, new_lr))
         # every epoch learning rate decay
-        if args.start_epoch != 0 or total_batch >= lr_warmup:
-            new_lr = trainer.learning_rate * lr_decay
-            # lr_steps.pop(0)
-            trainer.set_learning_rate(new_lr)
-            logger.info("[Epoch {}] Set learning rate to {}".format(epoch, new_lr))
+        # if args.start_epoch != 0 or total_batch >= lr_warmup:
+        #     new_lr = trainer.learning_rate * lr_decay
+        #     # lr_steps.pop(0)
+        #     trainer.set_learning_rate(new_lr)
+        #     logger.info("[Epoch {}] Set learning rate to {}".format(epoch, new_lr))
 
-        face_ce_metric.reset()
-        face_smoothl1_metric.reset()
-        head_ce_metric.reset()
-        head_smoothl1_metric.reset()
-        body_ce_metric.reset()
-        body_smoothl1_metric.reset()
+        for m in metrics:
+            m.reset()
         tic = time.time()
         btic = time.time()
 
-        for i, batch in enumerate(train_data):
-            # if epoch == 0 and i <= lr_warmup:
+        for i, batch in tqdm.tqdm(enumerate(train_data)):
+
+            # if args.start_epoch == 0 and total_batch <= lr_warmup:
             #     # adjust based on real percentage
-            #     new_lr = base_lr * get_lr_at_iter((i + 1) / lr_warmup)
+            #     new_lr = base_lr * get_lr_at_iter((total_batch + 1) / lr_warmup)
             #     if new_lr != trainer.learning_rate:
             #         if i % args.log_interval == 0:
-            #             logger.info('[Epoch 0 Iteration {}] Set learning rate to {}'.format(i, new_lr))
+            #             logger.info(
+            #                 '[Epoch {} Iteration {}] Set learning rate to {}'.format(epoch, total_batch, new_lr))
             #         trainer.set_learning_rate(new_lr)
-            if args.start_epoch == 0 and total_batch <= lr_warmup:
-                # adjust based on real percentage
-                new_lr = base_lr * get_lr_at_iter((total_batch + 1) / lr_warmup)
-                if new_lr != trainer.learning_rate:
-                    if i % args.log_interval == 0:
-                        logger.info(
-                            '[Epoch {} Iteration {}] Set learning rate to {}'.format(epoch, total_batch, new_lr))
-                    trainer.set_learning_rate(new_lr)
             total_batch += 1
             batch_size = batch[0].shape[0]
             data = gluon.utils.split_and_load(batch[0], ctx_list=ctx, batch_axis=0)
@@ -296,11 +311,14 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
 
                 # use 1:0.5:0.2 to backward loss
                 # totalloss = [face_sum_loss,head_sum_loss,body_sum_loss]
-                totalloss = [f + 0.5 * h + 0.2 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
+                totalloss = [f + 0.5 * h + 0.1 * b for f, h, b in zip(face_sum_loss, head_sum_loss, body_sum_loss)]
                 # totalloss = face_sum_loss+head_sum_loss
+                # autograd.backward(totalloss)
+
                 autograd.backward(totalloss)
             # since we have already normalized the loss, we don't want to normalize
             # by batch-size anymore
+
             trainer.step(1)
             # logger training info
             face_ce_metric.update(0, [l * batch_size for l in face_cls_loss])
@@ -315,11 +333,11 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             if args.log_interval and not (i + 1) % args.log_interval:
                 info = ','.join(['{}={:.4f}'.format(*metric.get()) for metric in metrics])
                 # print(info)
-                logger.info('[Epoch {}][Batch {}], Speed: {:.3f} samples/sec {:s}'.format(
-                    epoch, i, batch_size / (time.time() - btic), info))
+                logger.info('[Epoch {}][Batch {}], Speed: {:.3f} samples/sec , lr: {:.5f} ,{:s}'.format(
+                    epoch, i, batch_size / (time.time() - btic), trainer.learning_rate, info))
             btic = time.time()
         info = ','.join(['{}={:.4f}'.format(*metric.get()) for metric in metrics])
-        logger.info('[Epoch {}] Training cost: {:s}'.format(epoch, info))
+        logger.info('[Epoch {}] lr: {:.5f} Training cost: {:s}'.format(epoch, trainer.learning_rate, info))
 
         if args.val_interval and not (epoch + 1) % args.val_interval:
             # consider reduce the frequency of validation to save time
@@ -328,7 +346,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             val_msg = '\n'.join(['{:7}MAP = {}'.format(k, v) for k, v in zip(names, maps)])
             logger.info('[Epoch {}] Validation: {:.3f}\n{}'.format(epoch, (time.time() - vtic), val_msg))
             current_map = sum(maps) / len(maps)
-            # save_params(net, logger,best_map, current_map, maps, epoch, args.save_interval, args.save_prefix)
+            save_params(net, logger,best_map, current_map, maps, epoch, args.save_interval, args.save_prefix)
         else:
             current_map = 0.
             maps = None
@@ -345,12 +363,14 @@ if __name__ == '__main__':
 
     # network
     net = get_pyramidbox(args.network, args.use_bn, pretrained=args.resume)
+    # net.initialize(mx.init.Xavier())
     network = args.network + ('_bn' if args.use_bn else '')
     args.save_prefix = os.path.join(args.save_prefix, network, 'pyramidbox')
     # training data
     train_dataset, val_dataset, eval_metric = get_dataset(args.dataset)
+    train_samples = len(train_dataset)
     train_data, val_data = get_dataloader(
         net, train_dataset, val_dataset, args.data_shape, args.batch_size, args.num_workers, args)
 
     # training
-    train(net, train_data, val_data, eval_metric, ctx, args)
+    train(net, train_samples, train_data, val_data, eval_metric, ctx, args)

@@ -1,6 +1,6 @@
 # PyramidBox: A Context-assisted Single Shot Face Detector
+
 ## Introduction
-----
 A MXNet implementation of PyramiBbox:A Context-assisted Single Shot Face Detector.
 If you want to learn more details,please refer to the original paper.
 ```
@@ -17,45 +17,51 @@ I train PyramidBox with WIDER FACE dataset,results are as follows:
 |&emsp;&emsp;|Easy mAP|Medium mAP|Hard mAP|
 |---|---|---|---|
 |paper|**96.1**|**95.0**|**88.9**|
-|this repo|**86.5**|**85.8**|**79.3**|
+|this repo|**92.5**|**90.8**|**83.3**|
 
 
 
 
 I think mainly reasons that this repo can not get the same precision as paper as follows:
 * I use batch size 4 because of memory limitations,which is 16 in the paper
-* I do not implement data-anchor-sampling
 * some parameters are not metioned in the paper
 
 
 Here are several examples of succesful detection outputs:
-![](http://plsf8r624.bkt.clouddn.com/detection1.png)
-![](http://plsf8r624.bkt.clouddn.com/detection2.png)
-![](http://plsf8r624.bkt.clouddn.com/detection4.png)
+![](./pictures/detection1.png)
+![](./pictures/detection2.png)
+![](./pictures/detection4.png)
 ## Details
 I implement following structures metioned in the paper:
 - [x] Low-Level FPN
 - [x] max-in-out layer
 - [x] PyramidAnchors
-- [x] Context-sensitive Prediction Module   
+- [x] Context-sensitive Prediction Module
+- [x] Data-anchor sampling
+- [x] Learning rate warmup and cosine decay   
 ## Dependencies
-* Python 3.x
+* Python 3.6.4
 * [MXNet](https://github.com/apache/incubator-mxnet) 1.3.1
 * [gluon-cv](https://github.com/dmlc/gluon-cv) 0.4.1
 
+## Implement Details
+* Ubuntu 16.04 LTS
+* CUDA 9.0
+* cuDNN 7.0.5
+
 ## Preparation
-```python
+```bash
 git clone git@github.com:JJXiangJiaoJun/gluon_PyramidBox.git
 cd gluon_PyramidBox
 ```
 
 ## Download and prepare data
 
-1. download [WIDER FACE](http://mmlab.ie.cuhk.edu.hk/projects/WIDERFace/) dataset into `./widerface`
+1. download [WIDER FACE](http://mmlab.ie.cuhk.edu.hk/projects/WIDERFace/) dataset into `widerface/downloads`
 
   ```bash
-  $$ tree widerface
-  widerface
+  $$ tree widerface/downloads
+  widerface/downloads
   ├── eval_tools.zip
   ├── Submission_example.zip
   ├── wider_face_split.zip
@@ -64,30 +70,34 @@ cd gluon_PyramidBox
   └── WIDER_val.zip
   ```
 
-2. Parpare data: unzip data, annotations and eval_tools to `./widerface`
+2. Prepare data: unzip data, annotations and eval_tools to `./widerface`
   ```bash
-    $$ tree widerface -L 1
-    widerface
-    ├── eval_tools
-    ├── wider_face_split
-    ├── WIDER_train
-    └── WIDER_val
+python tool/prepare.py
+$$ tree widerface -L 1
+widerface
+├── downloads
+├── eval_tools
+├── wider_face_split
+├── WIDER_train
+└── WIDER_val
   ```
 
 3. Prepare custom val dataset for quick validation (crop and resize to 640)
 
   ```bash
-  python tool/build_custom_val.py
-  $$ tree widerface -L 1
-    widerface
-    ├── eval_tools
-    ├── wider_face_split
-    ├── WIDER_train
-    └── WIDER_val
+$$ python tool/build_custom_val.py
+$$ tree widerface -L 1
+widerface
+├── downloads
+├── eval_tools
+├── WIDER_custom
+├── wider_face_split
+├── WIDER_train
+└── WIDER_val
   ```
 
 ## Train on WIDER FACE Datasets
-train vgg16 based pyramidbox.I only implement VGG16 as backbone currently:
+train vgg16 based pyramidbox with 1 gpus.I only implement VGG16 as backbone currently:
 ```bash
 python train_end2end.py --use-bn
 ```

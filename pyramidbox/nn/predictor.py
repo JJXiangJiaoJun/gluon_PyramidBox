@@ -45,15 +45,15 @@ class ConvMaxInOutPredictor(HybridBlock):
     def hybrid_forward(self, F, x):
         x = self.predictor(x)
         if self.max_out:
-            fc = F.slice_axis(x, axis=1, begin=0, end=1)
-            bg = F.slice_axis(x, axis=1, begin=1, end=None)
+            bg = F.slice_axis(x, axis=1, begin=0, end=3)
+            fg = F.slice_axis(x, axis=1, begin=3, end=None)
             bg = F.max_axis(bg, axis=1, keepdims=True)
         else:
-            fc = F.slice_axis(x, axis=1, begin=0, end=3)
-            bg = F.slice_axis(x, axis=1, begin=3, end=None)
-            fc = F.max_axis(fc, axis=1, keepdims=True)
+            bg = F.slice_axis(x, axis=1, begin=0, end=1)
+            fg = F.slice_axis(x, axis=1, begin=1, end=None)
+            fg = F.max_axis(fg, axis=1, keepdims=True)
 
-        return F.concat(fc, bg, dim=1)
+        return F.concat(bg, fg, dim=1)
 
 
 class ContextSensitiveModule(HybridBlock):
@@ -84,8 +84,8 @@ class ContextSensitiveModule(HybridBlock):
             # self.SSH_Conv_1 = nn.Conv2D(channels=out_plain, kernel_size=3, strides=1,padding=1
             #                             )
             self.relu_1 = nn.Activation('relu')
-            self.SSH_Conv_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                        padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.SSH_Conv_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,dilation=2,
+                                        padding=2,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             # self.SSH_Conv_2 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,padding=1
             #                             )
             self.relu_2 = nn.Activation('relu')
@@ -94,8 +94,8 @@ class ContextSensitiveModule(HybridBlock):
             # self.SSH_Conv_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
             #                               padding=1,)
             self.relu_2_1 = nn.Activation('relu')
-            self.SSH_Conv_2_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
-                                            padding=1,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.SSH_Conv_2_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,dilation=2,
+                                            padding=2,weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             # self.SSH_Conv_2_2_1 = nn.Conv2D(channels=out_plain // 2, kernel_size=3, strides=1,
             #                                 padding=1,)
             self.relu_2_2_1 = nn.Activation('relu')
@@ -115,9 +115,8 @@ class ContextSensitiveModule(HybridBlock):
         x_conv_2 = self.relu_2(self.SSH_Conv_2(x))
         x_conv_2_1 = self.relu_2_1(self.SSH_Conv_2_1(x_conv_2))
         x_conv_2_2 = self.relu_2_2_2(self.SSH_Conv_2_2_2(self.relu_2_2_1(self.SSH_Conv_2_2_1(x_conv_2))))
-        x_conv_2 = F.concat(x_conv_2_1, x_conv_2_2, dim=1)
 
-        out = F.concat(x_conv_1, x_conv_2, dim=1)
+        out = F.concat(x_conv_1, x_conv_2_1,x_conv_2_2, dim=1)
 
 
         return out

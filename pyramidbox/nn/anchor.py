@@ -6,7 +6,7 @@ from __future__ import absolute_import
 import numpy as np
 from mxnet import nd
 from gluoncv.nn.matcher import *
-from gluoncv.nn.sampler import OHEMSampler, NaiveSampler
+from gluoncv.nn.sampler import OHEMSampler, NaiveSampler, QuotaSampler
 from gluoncv.nn.coder import MultiClassEncoder, NormalizedBoxCenterEncoder
 from gluoncv.nn.bbox import BBoxCenterToCorner
 
@@ -117,13 +117,17 @@ class PyramidBoxTargetGenerator(gluon.Block):
     """
 
     def __init__(self, iou_thresh=0.35, neg_thresh=0.5, negative_mining_ratio=3,
-                 stds=(0.1, 0.1, 0.2, 0.2), **kwargs):
+                 stds=(0.1, 0.1, 0.2, 0.2), num_sample=1000, pos_thresh=0.35, neg_thresh_high=0.25,
+                 pos_ratio=0.3, neg_ratio=None, fill_negative=False, **kwargs):
         super(PyramidBoxTargetGenerator, self).__init__(**kwargs)
-        self._matcher = CompositeMatcher([BipartiteMatcher(), MaximumMatcher(iou_thresh)])
+        self._matcher = CompositeMatcher([ MaximumMatcher(iou_thresh)])
         if negative_mining_ratio > 0:
             self._sampler = OHEMSampler(negative_mining_ratio, thresh=neg_thresh)
         else:
-            self._sampler = NaiveSampler()
+            # self._sampler = NaiveSampler()
+            self._sampler = QuotaSampler(num_sample=num_sample, pos_thresh=pos_thresh, neg_thresh_high=neg_thresh_high,
+                                         neg_thresh_low=-np.inf, pos_ratio=pos_ratio, neg_ratio=neg_ratio,
+                                         fill_negative=fill_negative)
             self._use_negative_sampling = False
         self._cls_encoder = MultiClassEncoder()
         self._box_encoder = NormalizedBoxCenterEncoder(stds=stds)
@@ -139,12 +143,8 @@ class PyramidBoxTargetGenerator(gluon.Block):
         if self._use_negative_sampling:
             samples = self._sampler(matches, cls_preds, ious)
         else:
-            samples = self._sampler(matches)
+            # samples = self._sampler(matches)
+            samples = self._sampler(matches,ious)
         cls_targets = self._cls_encoder(samples, matches, gt_ids)
-        box_targets, box_masks = self._box_encoder(samples, matches, anchors,gt_boxes)
+        box_targets, box_masks = self._box_encoder(samples, matches, anchors, gt_boxes)
         return cls_targets, box_targets, box_masks
-
-
-
-
-

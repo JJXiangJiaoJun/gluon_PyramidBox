@@ -17,10 +17,10 @@ from gluoncv import data as gdata
 
 import sys
 sys.path.append('sfd')
-from pyrimidbox import get_pyramidbox
-from pyrimidbox import PyramidBoxDetector
-from pyrimidbox.data import WiderDetection
-from pyrimidbox.data import WiderFaceEvalMetric
+from pyramidbox import get_pyramidbox
+from pyramidbox import PyramidBoxDetector
+from pyramidbox.data import WiderDetection
+from pyramidbox.data import WiderFaceEvalMetric
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Eval SFD networks.')

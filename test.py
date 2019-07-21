@@ -7,8 +7,8 @@ import mxnet as mx
 import gluoncv as gcv
 from matplotlib import pyplot as plt
 
-from pyrimidbox import get_pyramidbox
-from pyrimidbox import PyramidBoxDetector
+from pyramidbox import get_pyramidbox
+from pyramidbox import PyramidBoxDetector
 plt.switch_backend('agg')
 
 def parse_args():

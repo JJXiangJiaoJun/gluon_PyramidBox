@@ -52,8 +52,8 @@ class LowLevelFeaturePyramidBlock(HybridBlock):
         super(LowLevelFeaturePyramidBlock, self).__init__(**kwargs)
         with self.name_scope():
             self.topdown = TopDownBlock(topdown_out_plain)
-            self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1,
-                                    weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            # self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1,
+            #                         weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             # self.smooth = nn.Conv2D(smooth_out_plain, kernel_size=3, padding=1,
             # )
 
@@ -61,8 +61,8 @@ class LowLevelFeaturePyramidBlock(HybridBlock):
 
     def hybrid_forward(self, F, top, lateral):
         topdown_out = self.topdown(top, lateral)
-        smooth_out = self.smooth(topdown_out)
-        return smooth_out
+        # smooth_out = self.smooth(topdown_out)
+        return topdown_out
 
 
 if __name__ == '__main__':

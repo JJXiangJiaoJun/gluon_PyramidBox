@@ -11,6 +11,7 @@ from mxnet.gluon.data import dataset
 from gluoncv.utils.bbox import bbox_xywh_to_xyxy
 from easydict import EasyDict as edict
 from scipy import io
+import cv2
 
 __all__ = ['YunCongDetection', 'WiderDetection']
 
@@ -69,7 +70,8 @@ class WiderDetection(dataset.Dataset):
     def __getitem__(self, idx):
         img_path = self._items[idx]
         label = self._labels[idx]
-        img = mx.image.imread(img_path)
+        # img = mx.image.imread(img_path)
+        img = cv2.imread(img_path)
         if self._transform is not None:
             return self._transform(img, label)
         else:

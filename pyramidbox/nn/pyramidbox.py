@@ -103,7 +103,7 @@ class PyramidBox(HybridBlock):
             self.conv7_context = ContextSensitiveModule(out_plain=256)
 
             # lateral layer
-            self.convfc7_lateral = nn.Conv2D(1024, kernel_size=1,
+            self.convfc7_lateral = nn.Conv2D(2048, kernel_size=1,
                                              weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             # self.convfc7_lateral = nn.Conv2D(1024, kernel_size=1,
             #                                  )
@@ -115,6 +115,13 @@ class PyramidBox(HybridBlock):
                                            weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
             # self.conv7_lateral = nn.Conv2D(256, kernel_size=1,
             #                                )
+            # smooth layer
+            self.smooth_c3 = nn.Conv2D(256, kernel_size=3, padding=1,
+                                       weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.smooth_c4 = nn.Conv2D(512, kernel_size=3, padding=1,
+                                       weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
+            self.smooth_c5 = nn.Conv2D(1024, kernel_size=3, padding=1,
+                                       weight_initializer=mx.init.Xavier(magnitude=2), bias_initializer='zeros')
 
             # generate anchors
             self.face_cls_predictors = nn.HybridSequential()
@@ -267,6 +274,10 @@ class PyramidBox(HybridBlock):
         lfpn0 = self.conv5_lfpn0(conv_fc7, conv5)
         lfpn1 = self.conv4_lfpn1(lfpn0, conv4)
         lfpn2 = self.conv3_lfpn2(lfpn1, conv3)
+
+        lfpn0 = self.smooth_c5(lfpn0)
+        lfpn1 = self.smooth_c4(lfpn1)
+        lfpn2 = self.smooth_c3(lfpn2)
 
         lfpn2 = self.conv3_context(lfpn2)
         lfpn1 = self.conv4_context(lfpn1)
